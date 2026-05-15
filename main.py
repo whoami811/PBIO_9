@@ -1,188 +1,317 @@
 import random
+def validate_positive_int(prompt: str,
+                          min_val: int = 1,
+                          max_val: int = 100000) -> int:
 
-def generate_sequence(length: int) -> str:
-    return "".join(random.choice("ACGT") for _ in range(length))
-
-def generate_sequence_with_distribution(length: int, distribution: dict) -> str:
-    nucleotides = list(distribution.keys())
-    weights = list(distribution.values())
-    return "".join(random.choices(nucleotides, weights=weights, k=length))
-
-def calculate_stats(sequence: str) -> dict:
-    length = len(sequence)
-
-    stats = {
-        "A": sequence.count("A") / length * 100,
-        "C": sequence.count("C") / length * 100,
-        "G": sequence.count("G") / length * 100,
-        "T": sequence.count("T") / length * 100,
-    }
-
-    stats["GC"] = stats["G"] + stats["C"]
-    return stats
-
-def insert_name(sequence: str, name: str) -> str:
-    position = random.randint(0, len(sequence))
-    return sequence[:position] + name.lower() + sequence[position:]
-
-def format_fasta(seq_id: str, description: str, sequence: str, line_width: int = 80) -> str:
-    header = f">{seq_id} {description}".rstrip()
-    lines = [sequence[i:i + line_width] for i in range(0, len(sequence), line_width)]
-    return header + "\n" + "\n".join(lines)
-
-def validate_positive_int(prompt: str, min_val: int = 1, max_val: int = 100_000) -> int:
     while True:
+
         value = input(prompt)
 
-        try:
-            number = int(value)
+        if not value.isdigit():
+            print(f"Error: value must be an integer in the range [{min_val}, {max_val}].")
+            continue
 
-            if min_val <= number <= max_val:
-                return number
+        number = int(value)
 
-        except ValueError:
-            pass
+        if min_val <= number <= max_val:
+            return number
 
         print(f"Error: value must be an integer in the range [{min_val}, {max_val}].")
 
-def validate_sequence_id(prompt: str) -> str:
-    while True:
-        seq_id = input(prompt)
-
-        if seq_id and not any(char.isspace() for char in seq_id):
-            return seq_id
-
-        print("Error: sequence ID cannot be empty or contain whitespace.")
-
-def get_distribution() -> dict:
-    use_custom = input("Use custom nucleotide distribution? (yes/no): ").lower()
-
-    if use_custom != "yes":
-        return {"A": 25, "C": 25, "G": 25, "T": 25}
+def validate_seq_id() -> str:
 
     while True:
-        distribution = {}
 
-        for nucleotide in "ACGT":
-            distribution[nucleotide] = validate_positive_int(
-                f"Enter percentage for {nucleotide}: ",
-                min_val=0,
-                max_val=100
-            )
+        seq_id = input("Enter sequence ID: ").strip()
 
-        if sum(distribution.values()) == 100:
-            return distribution
+        if seq_id == "":
+            print("Error: ID cannot be empty.")
+            continue
+
+        if " " in seq_id:
+            print("Error: ID cannot contain whitespace.")
+            continue
+
+        return seq_id
+
+def validate_distribution() -> tuple:
+    while True:
+
+        print("\nEnter nucleotide distribution:")
+
+        a = validate_positive_int("A percentage: ", 0, 100)
+        c = validate_positive_int("C percentage: ", 0, 100)
+        g = validate_positive_int("G percentage: ", 0, 100)
+        t = validate_positive_int("T percentage: ", 0, 100)
+
+        total = a + c + g + t
+
+        if total == 100:
+            return a, c, g, t
 
         print("Error: percentages must sum to 100.")
+def generate_sequence(length: int) -> str:
+    sequence = ""
+    for _ in range(length):
+        sequence += random.choice("ACGT")
 
-def find_motif(sequence: str, motif: str) -> list:
+    return sequence
+def generate_custom_sequence(length: int,
+                             a_percent: int,
+                             c_percent: int,
+                             g_percent: int,
+                             t_percent: int) -> str:
+    nucleotides = (
+        ["A"] * a_percent +
+        ["C"] * c_percent +
+        ["G"] * g_percent +
+        ["T"] * t_percent
+    )
+
+    sequence = ""
+    for _ in range(length):
+        sequence += random.choice(nucleotides)
+
+    return sequence
+def calculate_stats(sequence: str) -> dict:
+    stats = {}
+
+    length = len(sequence)
+
+    for nucleotide in "ACGT":
+
+        count = sequence.count(nucleotide)
+
+        stats[nucleotide] = round((count / length) * 100, 2)
+
+    gc_count = sequence.count("G") + sequence.count("C")
+
+    stats["GC"] = round((gc_count / length) * 100, 2)
+
+    return stats
+def insert_name(sequence: str, name: str) -> str:
+
+    position = random.randint(0, len(sequence))
+
+    modified_sequence = (
+        sequence[:position]
+        + name.lower()
+        + sequence[position:]
+    )
+
+    return modified_sequence
+
+
+def format_fasta(seq_id: str,
+                 description: str,
+                 sequence: str,
+                 line_width: int = 80) -> str:
+
+    if description.strip() == "":
+        header = f">{seq_id}"
+    else:
+        header = f">{seq_id} {description}"
+
+    fasta_text = header + "\n"
+
+    for i in range(0, len(sequence), line_width):
+        fasta_text += sequence[i:i + line_width] + "\n"
+
+    return fasta_text
+
+
+def save_fasta(filename: str, content: str):
+
+    with open(filename, "w") as file:
+        file.write(content)
+
+def search_motif(sequence: str, motif: str) -> list:
+
     positions = []
-    start = 0
 
-    while True:
-        index = sequence.find(motif, start)
+    for i in range(len(sequence) - len(motif) + 1):
 
-        if index == -1:
-            break
+        fragment = sequence[i:i + len(motif)]
 
-        positions.append(index + 1)
-        start = index + 1
+        if fragment == motif:
+            positions.append(i + 1)
 
     return positions
 
-def get_complement(sequence: str) -> str:
-    table = str.maketrans("ACGT", "TGCA")
-    return sequence.translate(table)
+
+def complementary_sequence(sequence: str) -> str:
+
+    complement = ""
+
+    for nucleotide in sequence:
+
+        if nucleotide == "A":
+            complement += "T"
+
+        elif nucleotide == "T":
+            complement += "A"
+
+        elif nucleotide == "C":
+            complement += "G"
+
+        elif nucleotide == "G":
+            complement += "C"
+
+    return complement
 
 
-def get_reverse_complement(sequence: str) -> str:
-    return get_complement(sequence)[::-1]
+def reverse_complement(sequence: str) -> str:
+
+    complement = complementary_sequence(sequence)
+
+    return complement[::-1]
 
 
-def save_single_fasta(seq_id: str, description: str, sequence: str, name: str) -> None:
-    sequence_with_name = insert_name(sequence, name)
+def transcribe_dna(sequence: str) -> str:
 
-    complement = get_complement(sequence)
-    reverse_complement = get_reverse_complement(sequence)
+    return sequence.replace("T", "U")
 
-    fasta_records = [
-        format_fasta(seq_id, description, sequence_with_name),
-        format_fasta(seq_id + "_complement", "Complementary sequence", complement),
-        format_fasta(seq_id + "_reverse_complement", "Reverse complementary sequence", reverse_complement)
-    ]
+def main():
+
+    print("=== DNA FASTA Generator ===")
+
+    sequence_length = validate_positive_int(
+        "Enter sequence length: "
+    )
+
+    seq_id = validate_seq_id()
+
+    description = input(
+        "Enter sequence description: "
+    )
+
+    user_name = input(
+        "Enter your name: "
+    )
+
+    print("\nDo you want custom nucleotide distribution?")
+    print("1 - Yes")
+    print("2 - No")
+
+    choice = input("Choose option: ")
+
+    if choice == "1":
+
+        a, c, g, t = validate_distribution()
+
+        dna_sequence = generate_custom_sequence(
+            sequence_length,
+            a,
+            c,
+            g,
+            t
+        )
+
+    else:
+
+        dna_sequence = generate_sequence(
+            sequence_length
+        )
+
+    sequence_with_name = insert_name(
+        dna_sequence,
+        user_name
+    )
+
+    fasta_content = format_fasta(
+        seq_id,
+        description,
+        sequence_with_name
+    )
 
     filename = f"{seq_id}.fasta"
 
-    with open(filename, "w") as file:
-        file.write("\n".join(fasta_records))
+    save_fasta(
+        filename,
+        fasta_content
+    )
 
     print(f"\nSequence saved to file: {filename}")
 
-def save_batch_fasta(base_id: str, description: str, sequences: list, name: str) -> None:
-    filename = f"{base_id}_batch.fasta"
-    records = []
-
-    for index, sequence in enumerate(sequences, start=1):
-        seq_id = f"{base_id}_{index:03d}"
-        sequence_with_name = insert_name(sequence, name)
-
-        records.append(format_fasta(seq_id, description, sequence_with_name))
-        records.append(format_fasta(seq_id + "_complement", "Complementary sequence", get_complement(sequence)))
-        records.append(format_fasta(seq_id + "_reverse_complement", "Reverse complementary sequence", get_reverse_complement(sequence)))
-
-    with open(filename, "w") as file:
-        file.write("\n".join(records))
-
-    print(f"\nSequences saved to file: {filename}")
-
-def print_statistics(sequence: str) -> None:
-    stats = calculate_stats(sequence)
-
-    print(f"\nSequence statistics (n={len(sequence)}):")
-    print(f"A: {stats['A']:.2f}%")
-    print(f"C: {stats['C']:.2f}%")
-    print(f"G: {stats['G']:.2f}%")
-    print(f"T: {stats['T']:.2f}%")
-    print(f"GC-content : {stats['GC']:.2f}%")
-
-def main():
-    length = validate_positive_int("Enter sequence length: ")
-
-    seq_id = validate_sequence_id("Enter sequence ID: ")
-    description = input("Enter a description of the sequence: ")
-    name = input("Enter your name: ")
-
-    batch_count = validate_positive_int(
-        "Enter number of sequences to generate: ",
-        min_val=1,
-        max_val=1000
+    stats = calculate_stats(
+        dna_sequence
     )
 
-    distribution = get_distribution()
+    print(f"\nSequence statistics (n={sequence_length}):")
 
-    sequences = []
+    for nucleotide in "ACGT":
+        print(f"{nucleotide}: {stats[nucleotide]:.2f}%")
 
-    for _ in range(batch_count):
-        sequence = generate_sequence_with_distribution(length, distribution)
-        sequences.append(sequence)
+    print(f"GC-content: {stats['GC']:.2f}%")
 
-    if batch_count == 1:
-        save_single_fasta(seq_id, description, sequences[0], name)
-    else:
-        save_batch_fasta(seq_id, description, sequences, name)
+    motif = input("\nEnter motif to search: ").upper()
 
-    print_statistics(sequences[0])
+    if motif != "":
 
-    motif = input("\nEnter motif to search for, or press Enter to skip: ").upper()
+        motif_positions = search_motif(
+            dna_sequence,
+            motif
+        )
 
-    if motif:
-        positions = find_motif(sequences[0], motif)
-
-        if positions:
-            print(f"Motif {motif} found at positions: {positions}")
+        if len(motif_positions) > 0:
+            print("Motif found at positions:", motif_positions)
         else:
-            print(f"Motif {motif} was not found.")
+            print("Motif not found.")
 
+    complement = complementary_sequence(
+        dna_sequence
+    )
+
+    reverse = reverse_complement(
+        dna_sequence
+    )
+
+    print("\nComplementary strand:")
+    print(complement)
+
+    print("\nReverse complementary strand:")
+    print(reverse)
+
+    mrna = transcribe_dna(
+        dna_sequence
+    )
+
+    print("\nmRNA sequence:")
+    print(mrna)
+
+    with open(filename, "a") as file:
+
+        file.write("\n")
+
+        file.write(
+            format_fasta(
+                seq_id + "_COMP",
+                "Complementary strand",
+                complement
+            )
+        )
+
+        file.write("\n")
+
+        file.write(
+            format_fasta(
+                seq_id + "_REVCOMP",
+                "Reverse complementary strand",
+                reverse
+            )
+        )
+
+        file.write("\n")
+
+        file.write(
+            format_fasta(
+                seq_id + "_MRNA",
+                "mRNA sequence",
+                mrna
+            )
+        )
+
+    print("\nAdditional FASTA records added successfully.")
 
 if __name__ == "__main__":
     main()
